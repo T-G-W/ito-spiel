@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ITO – Multiplayer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+<div class="new-mode-menu">
+  <h1>Welcome to the New Mode Menu</h1>
+  <p>Select your options below:</p>
+</div>
+          <p class="eyebrow">Partyspiel</p>
+          <h1>ITO</h1>
+        </div>
+      </header>
+
+      <main class="main-grid">
+        <section class="panel" id="entry-panel">
+          <div class="card-group">
+            <div class="panel-block">
+              <h2>Raum erstellen</h2>
+              <label>
+                Dein Name
+                <input id="host-name" type="text" maxlength="20" placeholder="z. B. Anna" />
+              </label>
+              <button id="create-room-btn" class="primary-btn">Raum erstellen</button>
+            </div>
+
+            <div class="panel-block">
+              <h2>Raum beitreten</h2>
+              <label>
+                Dein Name
+                <input id="player-name" type="text" maxlength="20" placeholder="z. B. Ben" />
+              </label>
+              <label>
+                Raum-Code
+                <input id="room-code" type="text" maxlength="5" placeholder="ABCDE" />
+              </label>
+              <button id="join-room-btn" class="secondary-btn">Beitreten</button>
+            </div>
+          </div>
+
+          <div class="demo-box">
+            <button id="demo-two-player-btn" class="ghost-btn">2-Spieler-Test starten</button>
+            <p class="demo-hint">Erstellt automatisch einen Raum und öffnet einen zweiten Tab für den Mitspieler.</p>
+            <title>ITO // PLAYROOM</title>
+
+          <p id="error-message" class="error-message" aria-live="polite"></p>
+        </section>
+
+        <section class="panel hidden" id="host-panel">
+          <div class="toolbar">
+            <div>
+                  <h1>ITO<span>//</span>PLAYROOM</h1>
+              <h2>Raum <span id="room-code-display">—</span></h2>
+            </div>
+            <button id="start-round-btn" class="primary-btn">Runde starten</button>
+          </div>
+                <section class="menu-panel" id="entry-panel">
+          <div class="field-row">
+            <div><span class="tiny-label">100</span><span id="theme-max">—</span></div>
+                  <div class="menu-intro"><p class="eyebrow">Choose your arena</p><h2>Wie wollt ihr<br /><em>spielen?</em></h2><p>Ein Raum. Eine Skala. Sehr unterschiedliche Gefühle.</p></div>
+                  <div class="mode-grid" id="mode-grid">
+                    <button class="mode-card selected" data-mode="classic"><span class="mode-number">01</span><strong>Classic</strong><small>Eine gemeinsame Reihe. Alle gegen die Zahlen.</small></button>
+                    <button class="mode-card" data-mode="vs"><span class="mode-number">02</span><strong>VS</strong><small>Jede Person baut selbst. Punkte für richtige Nachbarn.</small></button>
+                    <button class="mode-card" data-mode="reverse"><span class="mode-number">03</span><strong>reverse VS</strong><small>Wörter sehen, Zahl sagen. Nähe gewinnt.</small></button>
+                    <button class="mode-card" data-mode="knockout"><span class="mode-number">04</span><strong>Knockout VS</strong><small>Die schwächste Reihe scheidet aus.</small></button>
+                  </div>
+                  <div class="entry-grid">
+                    <div class="entry-block"><label for="host-name">Hosten</label><input id="host-name" type="text" maxlength="20" placeholder="Dein Name" /><button id="create-room-btn" class="primary-btn">Lobby öffnen <span>↗</span></button></div>
+                    <div class="entry-block join-block"><label for="player-name">Beitreten</label><input id="player-name" type="text" maxlength="20" placeholder="Dein Name" /><input id="room-code" type="text" maxlength="5" placeholder="Raum-Code" /><button id="join-room-btn" class="secondary-btn">Mitspielen <span>↗</span></button></div>
+                  </div>
+                  <p id="selected-mode" class="selected-mode">Classic · gemeinsame Reihenfolge</p><p id="error-message" class="error-message" aria-live="polite"></p>
+            <div id="host-secret" class="secret-value hidden-number">••••</div>
+            <button id="host-toggle-number-btn" class="primary-btn">Zahl zeigen</button>
+          </div>
+
+          <div class="round-actions">
+            <button id="reveal-order-btn" class="secondary-btn">Auflösung zeigen</button>
+            <button id="reset-round-btn" class="ghost-btn">Zurücksetzen</button>
+          </div>
+
+          <div class="status-box" id="host-status">Noch keine Runde aktiv.</div>
+          <ul id="mismatch-list" class="mismatch-list"></ul>
+
+          <div class="order-box">
+            <h3>Reihenfolge</h3>
+            <ul id="host-order-list" class="order-list"></ul>
+          </div>
+
+          <div class="solution-box">
+            <h3>Richtige Lösung</h3>
+            <ul id="host-solution-list" class="order-list"></ul>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="player-panel">
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">Spieler</p>
+              <h2 id="player-header">Raum</h2>
+            </div>
+          </div>
+
+          <div class="player-card single-player">
+            <div class="player-meta">
+              <span id="player-name-label">Spieler</span>
+              <strong id="player-personal-name">—</strong>
+            </div>
+            <div id="player-secret" class="secret-value hidden-number">••••</div>
+            <button id="toggle-number-btn" class="primary-btn">Zahl zeigen</button>
+          </div>
+
+          <div class="players-box compact">
+            <h3>Mitspieler</h3>
+            <ul id="player-players-list" class="player-list compact-list"></ul>
+          </div>
+
+          <div class="status-box" id="player-status">Noch keine Runde aktiv.</div>
+
+          <div class="solution-box">
+            <h3>Richtige Lösung</h3>
+            <ul id="player-solution-list" class="order-list"></ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+      <script src="/app2.js"></script>
+  </body>
+</html>

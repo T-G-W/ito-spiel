@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ITO – Spielrunde</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Partyspiel</p>
+          <h1>ITO</h1>
+        </div>
+        <button id="new-round-btn" class="primary-btn">Neue Runde starten</button>
+      </header>
+
+      <main class="layout">
+        <section class="panel setup-panel">
+          <h2>Spieler</h2>
+          <div id="player-list" class="player-list"></div>
+          <div class="row actions">
+            <button id="add-player-btn" class="secondary-btn">Spieler hinzufügen</button>
+            <button id="randomize-btn" class="ghost-btn">Zahlen mischen</button>
+          </div>
+        </section>
+
+        <section class="panel theme-panel">
+          <h2>Thema</h2>
+          <label for="theme-select">Auswahl</label>
+          <select id="theme-select"></select>
+
+          <div class="theme-preview">
+            <div>
+              <span class="label">1</span>
+              <strong id="scale-min">...</strong>
+            </div>
+            <div>
+              <span class="label">100</span>
+              <strong id="scale-max">...</strong>
+            </div>
+          </div>
+
+          <p id="theme-description" class="theme-text">
+            Wähle ein Thema aus, das eine klar subjektive Skala erzeugt.
+          </p>
+        </section>
+
+        <section class="panel host-panel">
+          <h2>Host-Sicht</h2>
+          <div class="round-status" id="round-status">Noch keine Runde aktiv.</div>
+
+          <div class="order-box">
+            <h3>Reihenfolge</h3>
+            <ul id="order-list" class="order-list"></ul>
+          </div>
+
+          <div class="row actions">
+            <button id="reveal-btn" class="primary-btn">Auflösung zeigen</button>
+            <button id="reset-btn" class="ghost-btn">Zurücksetzen</button>
+          </div>
+        </section>
+      </main>
+
+      <section class="panel result-panel">
+        <h2>Ergebnis</h2>
+        <div id="result-summary" class="result-summary">Runde noch offen.</div>
+        <ul id="error-list" class="error-list"></ul>
+      </section>
+
+      <section class="panel player-panel">
+        <h2>Spieler-Ansicht</h2>
+        <div id="player-cards" class="player-cards"></div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

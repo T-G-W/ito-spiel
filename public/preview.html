@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ITO // PLAYROOM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div><p class="eyebrow">Social ranking game</p><h1>ITO<span>//</span>PLAYROOM</h1></div>
+      <div class="top-mark">01 — 100</div>
+    </header>
+    <main>
+      <section class="menu-panel">
+        <div class="menu-intro"><p class="eyebrow">Choose your arena</p><h2>Wie wollt ihr<br><em>spielen?</em></h2><p>Ein Raum. Eine Skala. Sehr unterschiedliche Gefühle.</p></div>
+        <div class="mode-grid">
+          <button class="mode-card selected" data-mode="classic"><span class="mode-number">01</span><strong>Classic</strong><small>Eine gemeinsame Reihe. Alle gegen die Zahlen.</small></button>
+          <button class="mode-card" data-mode="vs"><span class="mode-number">02</span><strong>VS</strong><small>Jede Person baut selbst. Punkte für richtige Nachbarn.</small></button>
+          <button class="mode-card" data-mode="reverse"><span class="mode-number">03</span><strong>reverse VS</strong><small>Wörter sehen, Zahl sagen. Nähe gewinnt.</small></button>
+          <button class="mode-card" data-mode="knockout"><span class="mode-number">04</span><strong>Knockout VS</strong><small>Die schwächste Reihe scheidet aus.</small></button>
+        </div>
+        <div class="entry-grid">
+          <div class="entry-block"><label for="host-name">Hosten</label><input id="host-name" placeholder="Dein Name"><button id="create-room" class="primary-btn">Lobby öffnen <span>↗</span></button></div>
+          <div class="entry-block join-block"><label for="player-name">Beitreten</label><input id="player-name" placeholder="Dein Name"><input id="room-code" placeholder="Raum-Code"><button id="join-room" class="secondary-btn">Mitspielen <span>↗</span></button></div>
+        </div>
+        <p id="selected-mode" class="selected-mode">Classic · gemeinsame Reihenfolge</p>
+        <p id="lobby-status" class="selected-mode" aria-live="polite"></p>
+      </section>
+      <section id="lobby-screen" class="menu-panel hidden">
+        <div class="menu-intro"><p class="eyebrow">Lobby ready</p><h2>Ihr seid<br><em>dabei.</em></h2><p id="lobby-mode"></p></div>
+        <div class="theme-card"><p class="eyebrow">Room code</p><h3 id="lobby-code">-----</h3><p class="muted">Teile diesen Code mit deinen Mitspielern.</p></div>
+        <div class="players-box"><div class="section-head"><h3>Spieler</h3><span id="lobby-count">0</span></div><ul id="lobby-players" class="player-list"></ul></div>
+        <div class="entry-grid"><button id="start-lobby-round" class="primary-btn">Runde starten <span>↗</span></button><button id="back-to-menu" class="ghost-btn">Zurück zum Menü</button></div>
+        <p id="lobby-room-status" class="selected-mode" aria-live="polite"></p>
+      </section>
+      <section id="round-screen" class="menu-panel hidden">
+        <div class="game-header"><div><p class="eyebrow" id="round-mode">ROUND</p><h2 id="round-title">Runde</h2><p id="round-theme" class="muted"></p></div><div class="round-personal-number"><span>Deine Zahl</span><strong id="round-secret">—</strong></div><div class="round-clock"><span>Zeit</span><strong id="round-timer">60</strong><small>Sekunden</small></div><button id="round-reveal" class="secondary-btn" disabled>Auflösung</button></div>
+        <div id="round-content"></div>
+        <p id="round-status" class="selected-mode" aria-live="polite"></p>
+      </section>
+      <section id="results-screen" class="menu-panel hidden">
+        <div class="menu-intro"><p class="eyebrow">Round complete</p><h2>Das<br><em>Ergebnis.</em></h2><p id="results-subtitle"></p></div>
+        <div id="results-content"></div>
+        <button id="new-round" class="primary-btn">Neue Runde</button>
+      </section>
+    </main>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let selectedMode = 'classic';
+    const modeLabels = { classic: 'Classic', vs: 'VS', reverse: 'reverse VS', knockout: 'Knockout VS' };
+    const status = document.getElementById('lobby-status');
+    const menu = document.querySelector('.menu-panel');
+    const lobby = document.getElementById('lobby-screen');
+    const round = document.getElementById('round-screen');
+    const results = document.getElementById('results-screen');
+    let latestRoom = null;
+    let timerInterval = null;
+    document.querySelectorAll('.mode-card').forEach((card) => card.addEventListener('click', () => {
+      selectedMode = card.dataset.mode;
+      document.querySelectorAll('.mode-card').forEach((item) => item.classList.remove('selected'));
+      card.classList.add('selected');
+      document.getElementById('selected-mode').textContent = `${modeLabels[selectedMode]} · ausgewählt`;
+    }));
+    document.getElementById('create-room').addEventListener('click', () => {
+      const name = document.getElementById('host-name').value.trim();
+      if (!name) { status.textContent = 'Bitte deinen Namen eingeben.'; return; }
+      status.textContent = 'Lobby wird geöffnet ...';
+      socket.emit('create-room', { name, mode: selectedMode });
+    });
+    document.getElementById('join-room').addEventListener('click', () => {
+      const name = document.getElementById('player-name').value.trim();
+      const code = document.getElementById('room-code').value.trim().toUpperCase();
+      if (!name || !code) { status.textContent = 'Name und Raum-Code eingeben.'; return; }
+      status.textContent = 'Lobby wird gesucht ...';
+      socket.emit('join-room', { name, code });
+    });
+    socket.on('joined-room', ({ code, isHost }) => {
+      status.textContent = `${isHost ? 'Lobby eröffnet' : 'Lobby beigetreten'} · Code: ${code}`;
+      menu.classList.add('hidden');
+      lobby.classList.remove('hidden');
+      document.getElementById('lobby-code').textContent = code;
+      document.getElementById('start-lobby-round').classList.toggle('hidden', !isHost);
+    });
+    socket.on('room-state', (room) => {
+      latestRoom = room;
+      if (room.round) {
+        if (room.round.revealed) {
+          menu.classList.add('hidden');
+          lobby.classList.add('hidden');
+          round.classList.add('hidden');
+          results.classList.remove('hidden');
+          renderResults(room);
+          return;
+        }
+        menu.classList.add('hidden');
+        lobby.classList.add('hidden');
+        results.classList.add('hidden');
+        round.classList.remove('hidden');
+        renderRound(room);
+        return;
+      }
+      lobby.classList.remove('hidden');
+      document.getElementById('lobby-code').textContent = room.code;
+      document.getElementById('lobby-mode').textContent = `${modeLabels[room.mode]} · ${room.modeDescription}`;
+      document.getElementById('lobby-count').textContent = `${room.players.length} Spieler`;
+      document.getElementById('lobby-players').innerHTML = room.players.map((player) => `<li><span>${player.name}</span><strong>${player.isHost ? 'Host' : 'Spieler'}</strong></li>`).join('');
+      if (room.round) document.getElementById('lobby-room-status').textContent = room.round.revealed ? 'Runde aufgelöst.' : 'Runde läuft.';
+    });
+    socket.on('room-error', (message) => { status.textContent = message; });
+    document.getElementById('start-lobby-round').addEventListener('click', () => socket.emit('start-round', { code: document.getElementById('lobby-code').textContent }));
+    document.getElementById('back-to-menu').addEventListener('click', () => { lobby.classList.add('hidden'); menu.classList.remove('hidden'); });
+    document.getElementById('new-round').addEventListener('click', () => { socket.emit('reset-round', { code: latestRoom?.code }); results.classList.add('hidden'); lobby.classList.remove('hidden'); });
+    document.getElementById('round-reveal').addEventListener('click', () => socket.emit('reveal-order', { code: latestRoom?.code }));
+
+    function renderRound(room) {
+      const round = room.round;
+      const isReverse = room.mode === 'reverse';
+      const isPersonalOrder = room.mode !== 'reverse';
+      document.getElementById('round-mode').textContent = room.modeLabel;
+      document.getElementById('round-title').textContent = isReverse ? 'Wörter bewerten' : 'Deine Reihenfolge';
+      document.getElementById('round-theme').textContent = `${room.theme.label} · 1 = ${room.theme.min} · 100 = ${room.theme.max}`;
+      const me = room.players.find((player) => player.id === socket.id);
+      const personalNumber = document.getElementById('round-secret');
+      personalNumber.textContent = isReverse ? '—' : (me?.secretNumber ?? '—');
+      personalNumber.parentElement.classList.toggle('hidden', isReverse);
+      const revealButton = document.getElementById('round-reveal');
+      revealButton.classList.toggle('hidden', round.revealed);
+      clearInterval(timerInterval);
+      const timerEndsAt = Date.now() + round.remainingMs;
+      const updateTimer = () => {
+        const seconds = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
+        document.getElementById('round-timer').textContent = seconds;
+        revealButton.disabled = seconds > 0;
+        revealButton.textContent = seconds > 0 ? `Auflösung in ${seconds}s` : 'Auflösung';
+        if (seconds === 0) clearInterval(timerInterval);
+      };
+      updateTimer();
+      if (!round.revealed) timerInterval = setInterval(updateTimer, 250);
+      if (isReverse) {
+        const ratingsSubmitted = round.reverseItems.length > 0 && round.reverseItems.every((item) => Number.isFinite(Number(round.myRatings[item.id])));
+        document.getElementById('round-content').innerHTML = `<div class="reverse-list">${round.reverseItems.map((item) => `<label class="rating-row"><span>${item.word}</span><input type="number" min="1" max="100" data-rating="${item.id}" value="${round.myRatings[item.id] || ''}" placeholder="1–100" ${ratingsSubmitted ? 'disabled' : ''}><b>${item.target || ''}</b></label>`).join('')}</div><button id="submit-ratings" class="primary-btn" ${ratingsSubmitted ? 'disabled' : ''}>${ratingsSubmitted ? 'Ratings abgegeben ✓' : 'Ratings abgeben'}</button><p id="rating-status" class="selected-mode">${ratingsSubmitted ? 'Deine Ratings wurden gespeichert und warten auf die Auflösung.' : 'Bewerte jedes Wort und bestätige dann deine Abgabe.'}</p>`;
+        document.getElementById('submit-ratings').onclick = () => {
+          const inputs = [...document.querySelectorAll('[data-rating]')];
+          const incomplete = inputs.some((input) => !input.value || Number(input.value) < 1 || Number(input.value) > 100);
+          if (incomplete) {
+            document.getElementById('rating-status').textContent = 'Bitte gib für jedes Wort eine Zahl von 1 bis 100 ein.';
+            return;
+          }
+          socket.emit('submit-ratings', { code: room.code, ratings: Object.fromEntries(inputs.map((input) => [input.dataset.rating, input.value])) });
+          document.getElementById('rating-status').textContent = 'Abgabe wird gespeichert ...';
+        };
+      } else {
+        const order = round.myOrder ? [...round.myOrder] : [...round.order];
+        const orderSubmitted = Boolean(round.myOrder);
+        const draggable = !orderSubmitted;
+        document.getElementById('round-content').innerHTML = `<ul id="round-order-list" class="order-list">${order.map((id, index) => { const player = room.players.find((entry) => entry.id === id); return `<li class="order-item ${draggable ? 'draggable' : ''}" draggable="${draggable}" data-order-id="${id}"><span class="order-slot">${index + 1}</span><span>${player?.name || 'Spieler'}${round.revealed && player?.secretNumber ? ` · ${player.secretNumber}` : ''}</span></li>`; }).join('')}</ul><button id="submit-order" class="primary-btn" ${orderSubmitted ? 'disabled' : ''}>${orderSubmitted ? 'Reihenfolge abgegeben ✓' : room.mode === 'classic' ? 'Reihenfolge bestätigen' : 'Meine Reihenfolge abgeben'}</button><p class="selected-mode">${orderSubmitted ? 'Deine Reihenfolge ist gespeichert und kann nicht mehr geändert werden.' : 'Ziehe die Namen in deine gewünschte Reihenfolge und gib sie einmal ab.'}</p>`;
+        if (draggable) {
+          let draggedId = null;
+          const orderList = document.getElementById('round-order-list');
+          orderList.querySelectorAll('[data-order-id]').forEach((item) => {
+            item.addEventListener('dragstart', () => { draggedId = item.dataset.orderId; });
+            item.addEventListener('dragover', (event) => event.preventDefault());
+            item.addEventListener('drop', (event) => {
+              event.preventDefault();
+              const targetId = item.dataset.orderId;
+              const nextOrder = [...order];
+              const from = nextOrder.indexOf(draggedId);
+              const to = nextOrder.indexOf(targetId);
+              if (from === -1 || to === -1 || from === to) return;
+              nextOrder.splice(from, 1);
+              nextOrder.splice(to, 0, draggedId);
+              order.splice(0, order.length, ...nextOrder);
+                renderRound({ ...room, round: { ...round, order, myOrder: round.myOrder } });
+            });
+          });
+        }
+        document.getElementById('submit-order').onclick = () => socket.emit('submit-order', { code: room.code, order });
+      }
+      const scoreText = room.players.map((player) => `${player.name}: ${player.score} P`).join(' · ');
+      document.getElementById('round-status').textContent = round.revealed ? `Aufgelöst · ${scoreText}` : `Runde läuft · ${scoreText}`;
+    }
+
+    function renderResults(room) {
+      document.getElementById('results-subtitle').textContent = `${room.modeLabel} · Jede Abgabe ist jetzt festgeschrieben.`;
+      const leaderboard = [...room.players].sort((left, right) => (right.score || 0) - (left.score || 0)).map((player, index) => `<li><span><b>${index + 1}.</b> ${player.name}</span><strong>${player.score || 0} Punkte</strong></li>`).join('');
+      const knownResults = new Map((room.round.results || []).map((result) => [result.playerId, result]));
+      const resultsHtml = room.players.map((player) => {
+        const result = knownResults.get(player.id) || { playerId: player.id, playerName: player.name, totalPoints: 0, guesses: [] };
+        const guesses = result.guesses ? `<div class="result-guesses">${result.guesses.map((guess) => `<div><span>${guess.word}</span><strong>${guess.guess ?? '—'} → ${guess.target}</strong><small>${guess.guess === null ? 'nicht abgegeben' : `${guess.distance} Abstand · ${guess.points} P`}</small></div>`).join('')}</div>` : `<div class="result-guesses"><div><span>Getippte Reihenfolge</span><strong>${(result.guessedOrder || []).map((id) => room.players.find((player) => player.id === id)?.name || 'Spieler').join(' → ')}</strong><small>${result.mismatches?.length || 0} falsche Nachbar-Paare</small></div></div>`;
+        const detail = result.guesses?.length || result.guessedOrder?.length ? guesses : '<p class="selected-mode">Für diese Runde liegt kein eigener Tipp vor.</p>';
+        return `<article class="result-card"><div class="result-card-head"><h3>Spieler: ${result.playerName}</h3><strong>${result.totalPoints} Punkte</strong></div>${detail}</article>`;
+      }).join('');
+      document.getElementById('results-content').innerHTML = `<div class="result-leaderboard"><div class="section-head"><h3>Leaderboard</h3><span>Gesamtpunkte</span></div><ul class="player-list">${leaderboard}</ul></div>${resultsHtml || '<p class="selected-mode">Noch keine Ergebnisse.</p>'}`;
+    }
+  </script>
+</body>
+</html>
