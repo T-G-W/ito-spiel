@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
+const questionPool = require('./questions');
 
 const app = express();
 const server = http.createServer(app);
@@ -51,9 +52,15 @@ function shuffle(list) {
 function activePlayers(room) { return room.players.filter((player) => !player.eliminated); }
 function randomizeOrder(room) { return shuffle(activePlayers(room).map((player) => player.id)); }
 
+function nextQuestion(room) {
+  const available = questionPool.filter((question) => question.label !== room.lastQuestionLabel);
+  const pool = available.length ? available : questionPool;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function createRoom(mode) {
   const code = generateRoomCode();
-  const room = { code, mode: modeInfo[mode] ? mode : 'classic', hostId: null, players: [], theme: themes[0], round: null };
+  const room = { code, mode: modeInfo[mode] ? mode : 'classic', hostId: null, players: [], theme: themes[0], lastQuestionLabel: null, round: null };
   rooms.set(code, room);
   return room;
 }
@@ -65,10 +72,12 @@ function assignNumbers(room) {
 
 function startRound(room) {
   const players = activePlayers(room);
+  room.theme = nextQuestion(room);
+  room.lastQuestionLabel = room.theme.label;
   room.round = { active: true, order: randomizeOrder(room), orders: {}, reverseItems: [], reverseRatings: {}, revealed: false, mismatches: [], scores: {}, results: [], eliminatedId: null, deadlineAt: Date.now() + ROUND_DURATION_MS, timer: null };
   players.forEach((player) => { room.round.scores[player.id] = 0; });
   if (room.mode === 'reverse') {
-    room.round.reverseItems = shuffle(reverseWords).slice(0, Math.min(5, players.length + 2)).map((word, index) => ({ id: `word-${index}-${Date.now()}`, word, target: Math.floor(Math.random() * 100) + 1 }));
+    room.round.reverseItems = shuffle(reverseWords).slice(0, Math.min(5, players.length + 2)).map((word, index) => ({ id: `word-${index}-${Date.now()}`, word, target: null }));
   } else assignNumbers(room);
   const round = room.round;
   round.timer = setTimeout(() => {
@@ -96,9 +105,15 @@ function revealRound(room) {
   room.round.timer = null;
   if (room.mode === 'reverse') {
     const players = activePlayers(room);
+    room.round.reverseItems.forEach((item) => {
+      const ratings = players
+        .map((player) => Number(room.round.reverseRatings[player.id]?.[item.id]))
+        .filter(Number.isFinite);
+      item.target = ratings.length ? Math.round(ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length) : null;
+    });
     room.round.results = players.map((player) => ({ playerId: player.id, playerName: player.name, totalPoints: 0, guesses: room.round.reverseItems.map((item) => {
       const guess = Number(room.round.reverseRatings[player.id]?.[item.id]);
-      const distance = Number.isFinite(guess) ? Math.abs(guess - item.target) : null;
+      const distance = Number.isFinite(guess) && item.target !== null ? Math.abs(guess - item.target) : null;
       const points = distance === null ? 0 : Math.max(0, 10 - Math.floor(distance / 10));
       return { itemId: item.id, word: item.word, guess: Number.isFinite(guess) ? guess : null, target: item.target, distance, points };
     }) }));
