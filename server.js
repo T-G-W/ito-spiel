@@ -25,7 +25,28 @@ const themes = [
   { label: 'Wie sehr brauche ich heute Ruhe?', min: 'ein kurzer Kaffee', max: 'ab auf eine einsame Insel' },
 ];
 
-const reverseWords = ['ein nasser Socken', 'Pizza zum Frühstück', 'ein Überraschungsanruf', 'Barfuß im Regen', 'ein freier Montag', 'laute Nachbarn', 'eine Umarmung', 'ein leerer Akku', 'Karaoke vor Fremden', 'frische Bettwäsche', 'ein verpasster Zug', 'ein gebrauchtes Geschenk'];
+const reverseWords = [
+  'ein Frühstück im Bett', 'Pizza zum Frühstück', 'ein Überraschungsanruf', 'barfuß im Regen',
+  'ein freier Montag', 'laute Nachbarn', 'eine Umarmung', 'ein leerer Akku',
+  'Karaoke vor Fremden', 'frische Bettwäsche', 'ein verpasster Zug', 'ein gebrauchtes Geschenk',
+  'ein spontaner Roadtrip', 'ein kalter Kaffee', 'ein Tag ohne Internet', 'ein geheimes Talent',
+  'eine Nacht im Zelt', 'ein Mittagsschlaf', 'ein voller Kühlschrank', 'ein leerer Kalender',
+  'ein Haustier im Büro', 'eine Nachricht um Mitternacht', 'ein Regenschirm im Sturm', 'ein Überraschungsgast',
+  'ein Zimmer voller Luftballons', 'ein verlorener Schlüssel', 'ein Picknick im Park', 'ein sehr langer Aufzug',
+  'ein Lied aus der Kindheit', 'ein falscher Name im Café', 'ein Geschenk ohne Schleife', 'ein Anruf von Oma',
+  'ein Abend ohne Termine', 'ein überfüllter Zug', 'ein Spaziergang im Schnee', 'ein kaputter Wecker',
+  'ein Kuchen zum Frühstück', 'eine Warteschlange an der Kasse', 'ein Urlaub ohne Plan', 'ein peinlicher Versprecher',
+  'ein Selfie mit Fremden', 'ein nasser Ärmel', 'ein Fahrrad ohne Licht', 'ein Buch mit offenem Ende',
+  'ein Essen mit Stäbchen', 'ein Nachbar mit Bohrmaschine', 'ein Konzert in der ersten Reihe', 'ein Tanzkurs',
+  'ein Paket vor der Tür', 'ein Abend am Lagerfeuer', 'ein fremder Hund im Garten', 'ein verlorener Regenschirm',
+  'eine spontane Einladung', 'ein Witz im falschen Moment', 'ein sehr scharfes Curry', 'ein leerer Akku unterwegs',
+  'eine Schlange im Zoo', 'ein platzer Reifen', 'ein Frühstück im Hotel', 'ein Ausflug bei Nebel',
+  'ein Lied im Ohr', 'ein unerwarteter Bonus', 'eine Stunde im Stau', 'ein Fotoalbum',
+  'ein Besuch im Freizeitpark', 'ein Tag am See', 'ein kaputter Drucker', 'ein geheimes Rezept',
+  'eine Rede vor vielen Menschen', 'ein ruhiger Sonntag', 'ein voller Briefkasten', 'ein Spaziergang bei Nacht',
+  'ein viel zu kleiner Regenschirm', 'ein neuer Lieblingssong', 'ein Anruf ohne Nachricht', 'ein freier Sitzplatz',
+  'ein Abend mit Brettspielen', 'ein verschüttetes Getränk', 'ein vergessenes Passwort', 'ein überraschender Fund',
+];
 const modeInfo = {
   classic: { label: 'Classic', description: 'Jede Person baut ihre eigene Reihenfolge und sammelt Punkte.' },
   vs: { label: 'VS', description: 'Jede Person baut ihre eigene Reihenfolge und sammelt Punkte.' },
@@ -58,9 +79,19 @@ function nextQuestion(room) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function nextReverseWords(room, count = 8) {
+  const previous = new Set(room.lastReverseWords || []);
+  const available = reverseWords.filter((word) => !previous.has(word));
+  const source = available.length >= count ? available : reverseWords;
+  const selected = shuffle(source).slice(0, count);
+  room.lastReverseWords = selected;
+  return selected;
+}
+
 function createRoom(mode) {
   const code = generateRoomCode();
-  const room = { code, mode: modeInfo[mode] ? mode : 'classic', hostId: null, players: [], theme: themes[0], lastQuestionLabel: null, round: null };
+  const initialQuestion = nextQuestion({ lastQuestionLabel: null });
+  const room = { code, mode: modeInfo[mode] ? mode : 'classic', hostId: null, players: [], theme: initialQuestion, lastQuestionLabel: initialQuestion.label, lastReverseWords: [], round: null };
   rooms.set(code, room);
   return room;
 }
@@ -77,7 +108,7 @@ function startRound(room) {
   room.round = { active: true, order: randomizeOrder(room), orders: {}, reverseItems: [], reverseRatings: {}, revealed: false, mismatches: [], scores: {}, results: [], eliminatedId: null, deadlineAt: Date.now() + ROUND_DURATION_MS, timer: null };
   players.forEach((player) => { room.round.scores[player.id] = 0; });
   if (room.mode === 'reverse') {
-    room.round.reverseItems = shuffle(reverseWords).slice(0, Math.min(5, players.length + 2)).map((word, index) => ({ id: `word-${index}-${Date.now()}`, word, target: null }));
+    room.round.reverseItems = nextReverseWords(room).map((word, index) => ({ id: `word-${index}-${Date.now()}`, word, target: null }));
   } else assignNumbers(room);
   const round = room.round;
   round.timer = setTimeout(() => {
