@@ -59,6 +59,8 @@
     const results = document.getElementById('results-screen');
     let latestRoom = null;
     let timerInterval = null;
+    let reverseDraftRatings = {};
+    let reverseDraftRoundKey = '';
     document.querySelectorAll('.mode-card').forEach((card) => card.addEventListener('click', () => {
       selectedMode = card.dataset.mode;
       document.querySelectorAll('.mode-card').forEach((item) => item.classList.remove('selected'));
@@ -113,7 +115,7 @@
     socket.on('room-error', (message) => { status.textContent = message; });
     document.getElementById('start-lobby-round').addEventListener('click', () => socket.emit('start-round', { code: document.getElementById('lobby-code').textContent }));
     document.getElementById('back-to-menu').addEventListener('click', () => { lobby.classList.add('hidden'); menu.classList.remove('hidden'); });
-    document.getElementById('new-round').addEventListener('click', () => { socket.emit('reset-round', { code: latestRoom?.code }); results.classList.add('hidden'); lobby.classList.remove('hidden'); });
+    document.getElementById('new-round').addEventListener('click', () => { reverseDraftRatings = {}; reverseDraftRoundKey = ''; socket.emit('reset-round', { code: latestRoom?.code }); results.classList.add('hidden'); lobby.classList.remove('hidden'); });
     document.getElementById('round-reveal').addEventListener('click', () => socket.emit('reveal-order', { code: latestRoom?.code }));
 
     function renderRound(room) {
@@ -141,8 +143,19 @@
       updateTimer();
       if (!round.revealed) timerInterval = setInterval(updateTimer, 250);
       if (isReverse) {
+        const roundKey = round.reverseItems.map((item) => item.id).join('|');
+        if (roundKey !== reverseDraftRoundKey) {
+          reverseDraftRoundKey = roundKey;
+          reverseDraftRatings = {};
+        }
         const ratingsSubmitted = round.reverseItems.length > 0 && round.reverseItems.every((item) => Number.isFinite(Number(round.myRatings[item.id])));
-        document.getElementById('round-content').innerHTML = `<div class="reverse-list">${round.reverseItems.map((item) => `<label class="rating-row"><span>${item.word}</span><input type="number" min="1" max="100" data-rating="${item.id}" value="${round.myRatings[item.id] || ''}" placeholder="1–100" ${ratingsSubmitted ? 'disabled' : ''}><b>${item.target || ''}</b></label>`).join('')}</div><button id="submit-ratings" class="primary-btn" ${ratingsSubmitted ? 'disabled' : ''}>${ratingsSubmitted ? 'Ratings abgegeben ✓' : 'Ratings abgeben'}</button><p id="rating-status" class="selected-mode">${ratingsSubmitted ? 'Deine Ratings wurden gespeichert und warten auf die Auflösung.' : 'Bewerte jedes Wort und bestätige dann deine Abgabe.'}</p>`;
+        const savedRatings = ratingsSubmitted ? round.myRatings : reverseDraftRatings;
+        document.getElementById('round-content').innerHTML = `<div class="reverse-list">${round.reverseItems.map((item) => `<label class="rating-row"><span>${item.word}</span><input type="number" min="1" max="100" data-rating="${item.id}" value="${savedRatings[item.id] ?? ''}" placeholder="1–100" ${ratingsSubmitted ? 'disabled' : ''}><b>${item.target || ''}</b></label>`).join('')}</div><button id="submit-ratings" class="primary-btn" ${ratingsSubmitted ? 'disabled' : ''}>${ratingsSubmitted ? 'Ratings abgegeben ✓' : 'Ratings abgeben'}</button><p id="rating-status" class="selected-mode">${ratingsSubmitted ? 'Deine Ratings wurden gespeichert und warten auf die Auflösung.' : 'Bewerte jedes Wort und bestätige dann deine Abgabe.'}</p>`;
+        document.querySelectorAll('[data-rating]').forEach((input) => {
+          input.addEventListener('input', () => {
+            reverseDraftRatings[input.dataset.rating] = input.value;
+          });
+        });
         document.getElementById('submit-ratings').onclick = () => {
           const inputs = [...document.querySelectorAll('[data-rating]')];
           const incomplete = inputs.some((input) => !input.value || Number(input.value) < 1 || Number(input.value) > 100);
@@ -150,12 +163,14 @@
             document.getElementById('rating-status').textContent = 'Bitte gib für jedes Wort eine Zahl von 1 bis 100 ein.';
             return;
           }
-          socket.emit('submit-ratings', { code: room.code, ratings: Object.fromEntries(inputs.map((input) => [input.dataset.rating, input.value])) });
+          reverseDraftRatings = Object.fromEntries(inputs.map((input) => [input.dataset.rating, input.value]));
+          socket.emit('submit-ratings', { code: room.code, ratings: reverseDraftRatings });
           document.getElementById('rating-status').textContent = 'Abgabe wird gespeichert ...';
         };
       } else {
-        const order = round.myOrder ? [...round.myOrder] : [...round.order];
-        const orderSubmitted = Boolean(round.myOrder);
+        const isClassic = room.mode === 'classic';
+        const order = isClassic ? [...round.order] : (round.myOrder ? [...round.myOrder] : [...round.order]);
+        const orderSubmitted = isClassic ? Boolean(round.classicSubmitted) : Boolean(round.myOrder);
         const draggable = !orderSubmitted;
         document.getElementById('round-content').innerHTML = `<ul id="round-order-list" class="order-list">${order.map((id, index) => { const player = room.players.find((entry) => entry.id === id); return `<li class="order-item ${draggable ? 'draggable' : ''}" draggable="${draggable}" data-order-id="${id}"><span class="order-slot">${index + 1}</span><span>${player?.name || 'Spieler'}${round.revealed && player?.secretNumber ? ` · ${player.secretNumber}` : ''}</span></li>`; }).join('')}</ul><button id="submit-order" class="primary-btn" ${orderSubmitted ? 'disabled' : ''}>${orderSubmitted ? 'Reihenfolge abgegeben ✓' : room.mode === 'classic' ? 'Reihenfolge bestätigen' : 'Meine Reihenfolge abgeben'}</button><p class="selected-mode">${orderSubmitted ? 'Deine Reihenfolge ist gespeichert und kann nicht mehr geändert werden.' : 'Ziehe die Namen in deine gewünschte Reihenfolge und gib sie einmal ab.'}</p>`;
         if (draggable) {
@@ -174,11 +189,12 @@
               nextOrder.splice(from, 1);
               nextOrder.splice(to, 0, draggedId);
               order.splice(0, order.length, ...nextOrder);
+                if (isClassic) socket.emit('update-classic-order', { code: room.code, order });
                 renderRound({ ...room, round: { ...round, order, myOrder: round.myOrder } });
             });
           });
         }
-        document.getElementById('submit-order').onclick = () => socket.emit('submit-order', { code: room.code, order });
+        document.getElementById('submit-order').onclick = () => socket.emit(isClassic ? 'submit-classic-order' : 'submit-order', { code: room.code, order });
       }
       const scoreText = room.players.map((player) => `${player.name}: ${player.score} P`).join(' · ');
       document.getElementById('round-status').textContent = round.revealed ? `Aufgelöst · ${scoreText}` : `Runde läuft · ${scoreText}`;

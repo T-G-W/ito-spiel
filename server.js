@@ -48,7 +48,7 @@ const reverseWords = [
   'ein Abend mit Brettspielen', 'ein verschüttetes Getränk', 'ein vergessenes Passwort', 'ein überraschender Fund',
 ];
 const modeInfo = {
-  classic: { label: 'Classic', description: 'Jede Person baut ihre eigene Reihenfolge und sammelt Punkte.' },
+  classic: { label: 'Classic', description: 'Alle bauen gemeinsam eine Reihenfolge und lösen sie zusammen auf.' },
   vs: { label: 'VS', description: 'Jede Person baut ihre eigene Reihenfolge und sammelt Punkte.' },
   reverse: { label: 'reverse VS', description: 'Bewerte Wörter mit einer Zahl von 1 bis 100.' },
   knockout: { label: 'Knockout VS', description: 'Die schwächste Person scheidet nach jeder Runde aus.' },
@@ -105,7 +105,7 @@ function startRound(room) {
   const players = activePlayers(room);
   room.theme = nextQuestion(room);
   room.lastQuestionLabel = room.theme.label;
-  room.round = { active: true, order: randomizeOrder(room), orders: {}, reverseItems: [], reverseRatings: {}, revealed: false, mismatches: [], scores: {}, results: [], eliminatedId: null, deadlineAt: Date.now() + ROUND_DURATION_MS, timer: null };
+  room.round = { active: true, order: randomizeOrder(room), orders: {}, classicSubmitted: false, reverseItems: [], reverseRatings: {}, revealed: false, mismatches: [], scores: {}, results: [], eliminatedId: null, deadlineAt: Date.now() + ROUND_DURATION_MS, timer: null };
   players.forEach((player) => { room.round.scores[player.id] = 0; });
   if (room.mode === 'reverse') {
     room.round.reverseItems = nextReverseWords(room).map((word, index) => ({ id: `word-${index}-${Date.now()}`, word, target: null }));
@@ -185,7 +185,7 @@ function roomState(room, viewerId) {
     players: room.players.map((player) => ({ id: player.id, name: player.name, secretNumber: room.mode === 'reverse' || revealVisible || player.id === viewerId ? player.secretNumber : null, score: player.score || 0, roundScore: room.round?.scores?.[player.id] || 0, isHost: player.id === room.hostId, eliminated: Boolean(player.eliminated) })),
     hostId: room.hostId,
     theme: room.theme,
-    round: room.round ? { active: room.round.active, order: room.round.order, orderLocked: Object.keys(room.round.orders).length > 0, myOrder: room.round.orders[viewerId] || null, revealed: room.round.revealed, remainingMs: Math.max(0, room.round.deadlineAt - Date.now()), mismatches: room.round.mismatches || [], scores: room.round.scores || {}, results: revealVisible ? room.round.results || [] : [], reverseItems: room.round.reverseItems.map(({ id, word, target }) => ({ id, word, target: revealVisible ? target : null })), myRatings: room.round.reverseRatings[viewerId] || {}, eliminatedId: room.round.eliminatedId } : null,
+    round: room.round ? { active: room.round.active, order: room.round.order, orderLocked: room.mode === 'classic' ? room.round.classicSubmitted : Object.keys(room.round.orders).length > 0, myOrder: room.round.orders[viewerId] || null, classicSubmitted: room.round.classicSubmitted, revealed: room.round.revealed, remainingMs: Math.max(0, room.round.deadlineAt - Date.now()), mismatches: room.round.mismatches || [], scores: room.round.scores || {}, results: revealVisible ? room.round.results || [] : [], reverseItems: room.round.reverseItems.map(({ id, word, target }) => ({ id, word, target: revealVisible ? target : null })), myRatings: room.round.reverseRatings[viewerId] || {}, eliminatedId: room.round.eliminatedId } : null,
   };
 }
 
@@ -226,13 +226,25 @@ io.on('connection', (socket) => {
   });
   socket.on('update-classic-order', ({ code, order }) => {
     const room = rooms.get(String(code || '').toUpperCase());
-    if (!room?.round || room.mode !== 'classic' || room.round.revealed || Object.keys(room.round.orders).length > 0) return;
+    if (!room?.round || room.mode !== 'classic' || room.round.revealed || room.round.classicSubmitted) return;
     const valid = new Set(activePlayers(room).map((player) => player.id));
     const clean = Array.isArray(order) ? order.filter((id) => valid.has(id)) : [];
     if (clean.length === valid.size && new Set(clean).size === valid.size) {
       room.round.order = clean;
       emitRoom(room);
     }
+  });
+  socket.on('submit-classic-order', ({ code, order }) => {
+    const room = rooms.get(String(code || '').toUpperCase());
+    if (!room?.round || room.mode !== 'classic' || room.round.revealed || room.round.classicSubmitted) return;
+    const valid = new Set(activePlayers(room).map((player) => player.id));
+    const clean = Array.isArray(order) ? order.filter((id) => valid.has(id)) : [];
+    if (clean.length === valid.size && new Set(clean).size === valid.size) {
+      room.round.order = clean;
+      room.round.classicSubmitted = true;
+      revealRound(room);
+    }
+    emitRoom(room);
   });
   socket.on('submit-order', ({ code, order }) => {
     const room = rooms.get(String(code || '').toUpperCase());
