@@ -44,6 +44,13 @@
         <div class="menu-intro"><p class="eyebrow">Round complete</p><h2>Das<br><em>Ergebnis.</em></h2><p id="results-subtitle"></p></div>
         <div id="results-content"></div>
         <button id="new-round" class="primary-btn">Neue Runde</button>
+        <div id="new-round-mode-picker" class="mode-grid hidden">
+          <p class="selected-mode">Modus für die nächste Runde wählen</p>
+          <button class="mode-card" data-next-mode="classic"><strong>Classic</strong><small>Gemeinsame Reihenfolge</small></button>
+          <button class="mode-card" data-next-mode="vs"><strong>VS</strong><small>Eigene Reihenfolge pro Spieler</small></button>
+          <button class="mode-card" data-next-mode="reverse"><strong>reverse VS</strong><small>Eigene Ratings pro Spieler</small></button>
+          <button class="mode-card" data-next-mode="knockout"><strong>Knockout VS</strong><small>Eigene Reihenfolge mit Ausscheiden</small></button>
+        </div>
       </section>
     </main>
   </div>
@@ -51,6 +58,7 @@
   <script>
     const socket = io();
     let selectedMode = 'classic';
+    let isHost = false;
     const modeLabels = { classic: 'Classic', vs: 'VS', reverse: 'reverse VS', knockout: 'Knockout VS' };
     const status = document.getElementById('lobby-status');
     const menu = document.querySelector('.menu-panel');
@@ -61,6 +69,8 @@
     let timerInterval = null;
     let reverseDraftRatings = {};
     let reverseDraftRoundKey = '';
+    let personalOrderDraft = [];
+    let personalOrderRoundKey = '';
     document.querySelectorAll('.mode-card').forEach((card) => card.addEventListener('click', () => {
       selectedMode = card.dataset.mode;
       document.querySelectorAll('.mode-card').forEach((item) => item.classList.remove('selected'));
@@ -80,7 +90,8 @@
       status.textContent = 'Lobby wird gesucht ...';
       socket.emit('join-room', { name, code });
     });
-    socket.on('joined-room', ({ code, isHost }) => {
+    socket.on('joined-room', ({ code, isHost: joinedAsHost }) => {
+      isHost = joinedAsHost;
       status.textContent = `${isHost ? 'Lobby eröffnet' : 'Lobby beigetreten'} · Code: ${code}`;
       menu.classList.add('hidden');
       lobby.classList.remove('hidden');
@@ -115,7 +126,20 @@
     socket.on('room-error', (message) => { status.textContent = message; });
     document.getElementById('start-lobby-round').addEventListener('click', () => socket.emit('start-round', { code: document.getElementById('lobby-code').textContent }));
     document.getElementById('back-to-menu').addEventListener('click', () => { lobby.classList.add('hidden'); menu.classList.remove('hidden'); });
-    document.getElementById('new-round').addEventListener('click', () => { reverseDraftRatings = {}; reverseDraftRoundKey = ''; socket.emit('reset-round', { code: latestRoom?.code }); results.classList.add('hidden'); lobby.classList.remove('hidden'); });
+    document.getElementById('new-round').addEventListener('click', () => {
+      if (!isHost) return;
+      document.getElementById('new-round-mode-picker').classList.remove('hidden');
+    });
+    document.querySelectorAll('[data-next-mode]').forEach((button) => button.addEventListener('click', () => {
+      reverseDraftRatings = {};
+      reverseDraftRoundKey = '';
+      personalOrderDraft = [];
+      personalOrderRoundKey = '';
+      socket.emit('reset-round', { code: latestRoom?.code, mode: button.dataset.nextMode });
+      document.getElementById('new-round-mode-picker').classList.add('hidden');
+      results.classList.add('hidden');
+      lobby.classList.remove('hidden');
+    }));
     document.getElementById('round-reveal').addEventListener('click', () => socket.emit('reveal-order', { code: latestRoom?.code }));
 
     function renderRound(room) {
@@ -169,7 +193,12 @@
         };
       } else {
         const isClassic = room.mode === 'classic';
-        const order = isClassic ? [...round.order] : (round.myOrder ? [...round.myOrder] : [...round.order]);
+        const orderRoundKey = `${room.mode}:${round.order.join('|')}`;
+        if (!isClassic && orderRoundKey !== personalOrderRoundKey) {
+          personalOrderRoundKey = orderRoundKey;
+          personalOrderDraft = round.myOrder ? [...round.myOrder] : [...round.order];
+        }
+        const order = isClassic ? [...round.order] : (round.myOrder ? [...round.myOrder] : [...personalOrderDraft]);
         const orderSubmitted = isClassic ? Boolean(round.classicSubmitted) : Boolean(round.myOrder);
         const draggable = !orderSubmitted;
         document.getElementById('round-content').innerHTML = `<ul id="round-order-list" class="order-list">${order.map((id, index) => { const player = room.players.find((entry) => entry.id === id); return `<li class="order-item ${draggable ? 'draggable' : ''}" draggable="${draggable}" data-order-id="${id}"><span class="order-slot">${index + 1}</span><span>${player?.name || 'Spieler'}${round.revealed && player?.secretNumber ? ` · ${player.secretNumber}` : ''}</span></li>`; }).join('')}</ul><button id="submit-order" class="primary-btn" ${orderSubmitted ? 'disabled' : ''}>${orderSubmitted ? 'Reihenfolge abgegeben ✓' : room.mode === 'classic' ? 'Reihenfolge bestätigen' : 'Meine Reihenfolge abgeben'}</button><p class="selected-mode">${orderSubmitted ? 'Deine Reihenfolge ist gespeichert und kann nicht mehr geändert werden.' : 'Ziehe die Namen in deine gewünschte Reihenfolge und gib sie einmal ab.'}</p>`;
@@ -189,6 +218,7 @@
               nextOrder.splice(from, 1);
               nextOrder.splice(to, 0, draggedId);
               order.splice(0, order.length, ...nextOrder);
+                if (!isClassic) personalOrderDraft = [...order];
                 if (isClassic) socket.emit('update-classic-order', { code: room.code, order });
                 renderRound({ ...room, round: { ...round, order, myOrder: round.myOrder } });
             });
@@ -212,6 +242,8 @@
         return `<article class="result-card"><div class="result-card-head"><h3>Spieler: ${result.playerName}</h3><strong>${result.totalPoints} Punkte</strong></div><p class="result-secret">Geheime Zahl: <strong>${playerNumber}</strong></p>${detail}</article>`;
       }).join('');
       document.getElementById('results-content').innerHTML = `<div class="result-leaderboard"><div class="section-head"><h3>Leaderboard</h3><span>Gesamtpunkte</span></div><ul class="player-list">${leaderboard}</ul></div>${resultsHtml || '<p class="selected-mode">Noch keine Ergebnisse.</p>'}`;
+      document.getElementById('new-round').classList.toggle('hidden', !isHost);
+      document.getElementById('new-round-mode-picker').classList.add('hidden');
     }
   </script>
 </body>

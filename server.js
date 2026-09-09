@@ -278,12 +278,16 @@ io.on('connection', (socket) => {
     revealRound(room);
     emitRoom(room);
   });
-  socket.on('reset-round', ({ code }) => {
+  socket.on('reset-round', ({ code, mode }) => {
     const room = rooms.get(String(code || '').toUpperCase());
     if (room?.hostId !== socket.id) return;
     if (room.round?.timer) clearTimeout(room.round.timer);
+    if (mode && modeInfo[mode]) room.mode = mode;
     room.round = null;
-    room.players.forEach((player) => { player.secretNumber = null; });
+    room.players.forEach((player) => {
+      player.secretNumber = null;
+      player.eliminated = false;
+    });
     emitRoom(room);
   });
   socket.on('disconnect', () => {
